@@ -9,7 +9,8 @@ Endpoints:
     POST /api/index     → Trigger dataset indexing (admin)
 
 Run:
-    uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    .venv\Scripts\Activate.ps1 
+    uvicorn main:app
 """
 
 from __future__ import annotations

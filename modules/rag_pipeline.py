@@ -3,8 +3,8 @@ import os
 
 logger = logging.getLogger(__name__)
 
-EMBEDDING_MODEL = "all-MiniLM-L12-v2"
-COLLECTION_NAME = "eng_mental_health_chatbot"
+EMBEDDING_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
+COLLECTION_NAME = "mental_health_chatbot"
 LLM_MODEL = "openai/gpt-oss-120b"
 ANSWER_CHUNK_SIZE = 500
 ANSWER_CHUNK_OVERLAP = 50

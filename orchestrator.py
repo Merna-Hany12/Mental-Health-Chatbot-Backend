@@ -77,120 +77,119 @@ class Orchestrator:
         """Load all modules before the first chat request."""
         self._setup()
 
+    def chat(self, message: str) -> Dict[str, Any]:
+        t0 = time.perf_counter()
+        logger.info("Chat request received.")
 
-def chat(self, message: str) -> Dict[str, Any]:
-    t0 = time.perf_counter()
-    logger.info("Chat request received.")
+        try:
+            self._setup()
+        except Exception:
+            logger.error("Module setup failed during chat request.", exc_info=True)
+            raise
 
-    try:
-        self._setup()
-    except Exception:
-        logger.error("Module setup failed during chat request.", exc_info=True)
-        raise
+        if not message or not message.strip():
+            logger.warning("Empty message received; returning fallback response.")
+            return self._empty_response()
 
-    if not message or not message.strip():
-        logger.warning("Empty message received; returning fallback response.")
-        return self._empty_response()
+        # step 1 - detect language
+        logger.info("Step 1/6: Detecting language...")
+        lang = self.lang_detector.predict(message)
+        if lang.get("low_confidence"):
+            logger.warning(
+                f"Low-confidence language detection: {lang['language']} ({lang['confidence']:.0%})"
+            )
+        logger.info(f"Language: {lang['language']} ({lang['confidence']:.0%})")
 
-    # step 1 - detect language
-    logger.info("Step 1/6: Detecting language...")
-    lang = self.lang_detector.predict(message)
-    if lang.get("low_confidence"):
-        logger.warning(
-            f"Low-confidence language detection: {lang['language']} ({lang['confidence']:.0%})"
-        )
-    logger.info(f"Language: {lang['language']} ({lang['confidence']:.0%})")
+        # step 2 - translate to english
+        logger.info("Step 2/6: Translating message to English if needed...")
+        try:
+            translation = self.translator.translate(
+                text=message,
+                source_lang=lang["language"],
+                source_lang_code=lang["code"],
+            )
+        except Exception:
+            logger.error("Translation failed; using original text as fallback.", exc_info=True)
+            translation = {"translated": message, "was_translated": False}
 
-    # step 2 - translate to english
-    logger.info("Step 2/6: Translating message to English if needed...")
-    try:
-        translation = self.translator.translate(
-            text=message,
-            source_lang=lang["language"],
-            source_lang_code=lang["code"],
-        )
-    except Exception:
-        logger.error("Translation failed; using original text as fallback.", exc_info=True)
-        translation = {"translated": message, "was_translated": False}
+        english_text = translation["translated"]
+        logger.info(f"Translation complete. Was translated: {translation.get('was_translated', False)}")
 
-    english_text = translation["translated"]
-    logger.info(f"Translation complete. Was translated: {translation.get('was_translated', False)}")
+        # step 3 - classify intent
+        logger.info("Step 3/6: Classifying intent...")
+        intent_result = self.intent_clf.predict(message)
+        intent = intent_result["intent"]
+        if intent_result.get("confidence") == "low":
+            logger.warning(f"Low-confidence intent classification: {intent}")
+        logger.info(f"Intent: {intent}")
 
-    # step 3 - classify intent
-    logger.info("Step 3/6: Classifying intent...")
-    intent_result = self.intent_clf.predict(message)
-    intent = intent_result["intent"]
-    if intent_result.get("confidence") == "low":
-        logger.warning(f"Low-confidence intent classification: {intent}")
-    logger.info(f"Intent: {intent}")
+        # step 4 - route
+        logger.info("Step 4/6: Choosing response route...")
+        if intent != "asking_mental_health_question":
+            logger.info("Route: direct response, RAG skipped.")
+            answer = self._direct_response(intent, lang)
+            logger.info(f"Chat request complete in {(time.perf_counter() - t0) * 1000:.1f} ms.")
+            return {
+                "answer": answer,
+                "language": lang,
+                "translation": translation,
+                "intent": intent_result,
+                "emotion": None,
+                "sources": [],
+                "used_rag": False,
+            }
 
-    # step 4 - route
-    logger.info("Step 4/6: Choosing response route...")
-    if intent != "asking_mental_health_question":
-        logger.info("Route: direct response, RAG skipped.")
-        answer = self._direct_response(intent, lang)
+        # step 5 - classify emotion
+        logger.info("Step 5/6: Classifying emotion...")
+        emotion = self.emotion_clf.predict(english_text)
+        if emotion.get("crisis_flag"):
+            logger.warning(
+                f"Crisis flag triggered: emotion={emotion['emotion']} confidence={emotion['confidence']}"
+            )
+        logger.info(f"Emotion: {emotion['emotion']} ({emotion['confidence']:.0%})")
+
+        # step 6 - RAG
+        logger.info("Step 6/6: Retrieving sources and generating RAG answer...")
+        if self.rag is None:
+            logger.warning("RAG route selected, but RAG pipeline is not configured.")
+            logger.info(f"Chat request complete in {(time.perf_counter() - t0) * 1000:.1f} ms.")
+            return {
+                "answer": "RAG pipeline is not configured. Please check your .env file.",
+                "language": lang,
+                "translation": translation,
+                "intent": intent_result,
+                "emotion": emotion,
+                "sources": [],
+                "used_rag": False,
+            }
+
+        try:
+            result = self.rag.ask(
+                question=english_text,
+                emotion_tone=emotion.get("tone_hint", "Be warm and empathetic."),
+                emotion_label=emotion.get("emotion", "neutral"),
+                language=lang["language"],
+                language_code=lang["code"],
+            )
+        except Exception:
+            logger.error("RAG pipeline failed unexpectedly.", exc_info=True)
+            raise
+
+        if not result.get("sources"):
+            logger.warning("RAG returned zero sources for a mental health question.")
+
+        logger.info(f"RAG answer generated with {len(result.get('sources', []))} sources.")
         logger.info(f"Chat request complete in {(time.perf_counter() - t0) * 1000:.1f} ms.")
-        return {
-            "answer": answer,
-            "language": lang,
-            "translation": translation,
-            "intent": intent_result,
-            "emotion": None,
-            "sources": [],
-            "used_rag": False,
-        }
 
-    # step 5 - classify emotion
-    logger.info("Step 5/6: Classifying emotion...")
-    emotion = self.emotion_clf.predict(english_text)
-    if emotion.get("crisis_flag"):
-        logger.warning(
-            f"Crisis flag triggered: emotion={emotion['emotion']} confidence={emotion['confidence']}"
-        )
-    logger.info(f"Emotion: {emotion['emotion']} ({emotion['confidence']:.0%})")
-
-    # step 6 - RAG
-    logger.info("Step 6/6: Retrieving sources and generating RAG answer...")
-    if self.rag is None:
-        logger.warning("RAG route selected, but RAG pipeline is not configured.")
-        logger.info(f"Chat request complete in {(time.perf_counter() - t0) * 1000:.1f} ms.")
         return {
-            "answer": "RAG pipeline is not configured. Please check your .env file.",
+            "answer": result["answer"],
             "language": lang,
             "translation": translation,
             "intent": intent_result,
             "emotion": emotion,
-            "sources": [],
-            "used_rag": False,
+            "sources": result.get("sources", []),
+            "used_rag": True,
         }
-
-    try:
-        result = self.rag.ask(
-            question=english_text,
-            emotion_tone=emotion.get("tone_hint", "Be warm and empathetic."),
-            emotion_label=emotion.get("emotion", "neutral"),
-            language=lang["language"],
-            language_code=lang["code"],
-        )
-    except Exception:
-        logger.error("RAG pipeline failed unexpectedly.", exc_info=True)
-        raise
-
-    if not result.get("sources"):
-        logger.warning("RAG returned zero sources for a mental health question.")
-
-    logger.info(f"RAG answer generated with {len(result.get('sources', []))} sources.")
-    logger.info(f"Chat request complete in {(time.perf_counter() - t0) * 1000:.1f} ms.")
-
-    return {
-        "answer": result["answer"],
-        "language": lang,
-        "translation": translation,
-        "intent": intent_result,
-        "emotion": emotion,
-        "sources": result.get("sources", []),
-        "used_rag": True,
-    }
 
     def _direct_response(self, intent: str, lang: Dict[str, Any]) -> str:
         responses = DIRECT_RESPONSES.get(intent, DIRECT_RESPONSES["out_of_scope"])
