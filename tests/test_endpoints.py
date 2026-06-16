@@ -1,8 +1,10 @@
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
+
 from main import app  # your FastAPI app
 
-transport = ASGITransport(app=app) # your FastAPI app
+transport = ASGITransport(app=app)  # your FastAPI app
+
 
 @pytest.mark.asyncio
 async def test_chat_happy_path():
@@ -10,7 +12,7 @@ async def test_chat_happy_path():
         payload = {
             "message": "Hello, I feel anxious",
             "session_id": "test123",
-            "show_sources": True
+            "show_sources": True,
         }
         response = await ac.post("/api/chat", json=payload)
         assert response.status_code == 200
@@ -31,6 +33,7 @@ async def test_chat_missing_message():
         response = await ac.post("/api/chat", json=payload)
         assert response.status_code in (400, 422)
 
+
 @pytest.mark.asyncio
 async def test_feedback_happy_path():
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -38,7 +41,7 @@ async def test_feedback_happy_path():
             "vote": "up",
             "user_message": "Hello",
             "bot_response": "Hi there",
-            "session_id": "test123"
+            "session_id": "test123",
         }
         response = await ac.post("/api/feedback", json=payload)
         assert response.status_code == 200
@@ -46,16 +49,14 @@ async def test_feedback_happy_path():
         assert "status" in data
         assert data["status"] == "ok"
 
+
 @pytest.mark.asyncio
 async def test_feedback_missing_vote():
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        payload = {
-            "user_message": "Hello",
-            "bot_response": "Hi there",
-            "session_id": "test123"
-        }
+        payload = {"user_message": "Hello", "bot_response": "Hi there", "session_id": "test123"}
         response = await ac.post("/api/feedback", json=payload)
         assert response.status_code in (400, 422)
+
 
 @pytest.mark.asyncio
 async def test_health_happy_path():
@@ -66,13 +67,14 @@ async def test_health_happy_path():
         assert "status" in data
         assert "modules" in data
 
+
 @pytest.mark.asyncio
 async def test_modules_happy_path():
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         response = await ac.get("/api/modules")
         assert response.status_code == 200
         data = response.json()
-        
+
         # Response should be a dict with "modules" key
         assert "modules" in data
         assert isinstance(data["modules"], list)

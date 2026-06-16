@@ -36,11 +36,41 @@ _GREETING_WORDS = {"hi", "hello", "hey", "good morning", "good afternoon", "good
 _GOODBYE_WORDS = {"bye", "goodbye", "see you", "talk later", "farewell", "take care", "good night"}
 _GRATITUDE_WORDS = {"thank", "thanks", "grateful", "appreciate", "cheers", "thx", "ty"}
 _MH_KEYWORDS = {
-    "anxious", "anxiety", "depressed", "depression", "sad", "hopeless", "stress",
-    "stressed", "worried", "panic", "trauma", "grief", "lonely", "loneliness",
-    "suicidal", "self-harm", "therapy", "therapist", "counseling", "mental health",
-    "cope", "coping", "emotion", "feeling", "mood", "sleep", "insomnia",
-    "worthless", "empty", "numb", "overwhelmed", "burnout", "phobia", "ocd", "ptsd",
+    "anxious",
+    "anxiety",
+    "depressed",
+    "depression",
+    "sad",
+    "hopeless",
+    "stress",
+    "stressed",
+    "worried",
+    "panic",
+    "trauma",
+    "grief",
+    "lonely",
+    "loneliness",
+    "suicidal",
+    "self-harm",
+    "therapy",
+    "therapist",
+    "counseling",
+    "mental health",
+    "cope",
+    "coping",
+    "emotion",
+    "feeling",
+    "mood",
+    "sleep",
+    "insomnia",
+    "worthless",
+    "empty",
+    "numb",
+    "overwhelmed",
+    "burnout",
+    "phobia",
+    "ocd",
+    "ptsd",
 }
 
 
@@ -50,13 +80,29 @@ def _rule_based_predict(text: str) -> Dict[str, Any]:
     words = set(re.findall(r"\w+", lower))
 
     if any(g in lower for g in _GOODBYE_WORDS):
-        return {"intent": "goodbye", "confidence": "medium", "reasoning": "Farewell keywords detected."}
+        return {
+            "intent": "goodbye",
+            "confidence": "medium",
+            "reasoning": "Farewell keywords detected.",
+        }
     if any(g in lower for g in _GRATITUDE_WORDS):
-        return {"intent": "gratitude", "confidence": "medium", "reasoning": "Thank-you keywords detected."}
+        return {
+            "intent": "gratitude",
+            "confidence": "medium",
+            "reasoning": "Thank-you keywords detected.",
+        }
     if any(g in lower for g in _GREETING_WORDS):
-        return {"intent": "greeting", "confidence": "medium", "reasoning": "Greeting keywords detected."}
+        return {
+            "intent": "greeting",
+            "confidence": "medium",
+            "reasoning": "Greeting keywords detected.",
+        }
     if words & _MH_KEYWORDS:
-        return {"intent": "asking_mental_health_question", "confidence": "medium", "reasoning": "Mental health keywords detected."}
+        return {
+            "intent": "asking_mental_health_question",
+            "confidence": "medium",
+            "reasoning": "Mental health keywords detected.",
+        }
     return {"intent": "out_of_scope", "confidence": "low", "reasoning": "No known pattern matched."}
 
 
@@ -131,7 +177,10 @@ class IntentClassifier:
             response = self._client.chat.completions.create(
                 model=self._model,
                 messages=[
-                    {"role": "system", "content": "You are an intent classifier. Respond with only the intent label."},
+                    {
+                        "role": "system",
+                        "content": "You are an intent classifier. Respond with only the intent label.",
+                    },
                     {"role": "user", "content": prompt},
                 ],
             )
@@ -144,7 +193,11 @@ class IntentClassifier:
                         "confidence": "medium",
                         "reasoning": f"Model output contained '{intent}'.",
                     }
-            return {"intent": "out_of_scope", "confidence": "low", "reasoning": "No matching intent in model output."}
+            return {
+                "intent": "out_of_scope",
+                "confidence": "low",
+                "reasoning": "No matching intent in model output.",
+            }
 
         except Exception as e:
             logger.error(f"Groq API error in intent classification: {e}")

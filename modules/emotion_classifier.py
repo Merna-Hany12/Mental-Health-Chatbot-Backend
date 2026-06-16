@@ -24,9 +24,9 @@ Usage:
     python emotion_classifier.py             # run demo inference table
 """
 
-from transformers import AutoTokenizer, pipeline
 from pathlib import Path
 
+from transformers import AutoTokenizer, pipeline
 
 MODEL_DIR = Path(__file__).parent.parent / "models" / "emotion_model"
 
@@ -43,7 +43,9 @@ EMOTION_TONE = {
 class EmotionClassifier:
     def __init__(self, model_dir: str = str(MODEL_DIR)):
         tokenizer = AutoTokenizer.from_pretrained(model_dir)
-        tokenizer.model_input_names = [n for n in tokenizer.model_input_names if n != "token_type_ids"]
+        tokenizer.model_input_names = [
+            n for n in tokenizer.model_input_names if n != "token_type_ids"
+        ]
 
         self.pipe = pipeline(
             "text-classification",

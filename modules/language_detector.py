@@ -17,6 +17,7 @@ import logging
 import re
 from pathlib import Path
 from typing import Any, Dict
+
 import joblib
 from sklearn.pipeline import Pipeline
 
@@ -65,7 +66,6 @@ def preprocess(text: str) -> str:
     text = _KEEP.sub(" ", text)
     text = re.sub(r"\s+", " ", text)
     return text
-
 
 
 # ── Detector Class ─────────────────────────────────────────────────────────────
@@ -162,155 +162,150 @@ class LanguageDetector:
 
 # ── CLI entry-point ────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    import sys
-
     logging.basicConfig(level=logging.INFO)
 
-    if len(sys.argv) > 1 and sys.argv[1] == "--train":
-        train(save=True)
-    else:
-        detector = LanguageDetector()
-        samples = [
-            ("en", "my name is Merna"),
-            ("en", "Thnak you"),
-            ("ar", "السلام عليكم"),
-            ("ar", "ازيك"),
-            ("ar", "أشعر بالقلق الشديد ولا أستطيع النوم."),
-            ("fr", "Je me sens très anxieux et je ne peux pas dormir."),
-            ("es", "Me siento muy ansioso y no puedo dormir."),
-            ("en", "I'm having trouble sleeping"),
-            ("de", "Ich fühle mich sehr gestresst."),
-            ("hi", "मुझे बहुत चिंता हो रही है।"),
-            ("zh", "我最近感到非常焦虑。"),
-            ("en", "hi"),
-            ("en", "help me"),
-            ("en", "I feel sad"),
-            ("en", "my name is Merna"),
-            ("en", "I cannot sleep at night"),
-            # ── Arabic ───────────────────────────────────────────────
-            ("ar", "مرحبا"),
-            ("ar", "ساعدني"),
-            ("ar", "أنا حزين"),
-            ("ar", "اسمي مرنا"),
-            ("ar", "لا أستطيع النوم"),
-            # ── French ───────────────────────────────────────────────
-            ("fr", "bonjour"),
-            ("fr", "aide moi"),
-            ("fr", "je suis triste"),
-            ("fr", "je m'appelle Merna"),
-            ("fr", "je ne peux pas dormir"),
-            # ── Spanish ──────────────────────────────────────────────
-            ("es", "hola"),
-            ("es", "ayúdame"),
-            ("es", "me siento triste"),
-            ("es", "me llamo Merna"),
-            ("es", "no puedo dormir"),
-            # ── German ───────────────────────────────────────────────
-            ("de", "hallo"),
-            ("de", "hilf mir"),
-            ("de", "ich bin traurig"),
-            ("de", "ich heiße Merna"),
-            ("de", "ich kann nicht schlafen"),
-            # ── Italian ──────────────────────────────────────────────
-            ("it", "ciao"),
-            ("it", "aiutami"),
-            ("it", "mi sento triste"),
-            ("it", "mi chiamo Merna"),
-            ("it", "non riesco a dormire"),
-            # ── Portuguese ───────────────────────────────────────────
-            ("pt", "olá"),
-            ("pt", "me ajuda"),
-            ("pt", "estou triste"),
-            ("pt", "meu nome é Merna"),
-            ("pt", "não consigo dormir"),
-            # ── Russian ──────────────────────────────────────────────
-            ("ru", "привет"),
-            ("ru", "помоги мне"),
-            ("ru", "мне грустно"),
-            ("ru", "меня зовут Мерна"),
-            ("ru", "я не могу спать"),
-            # ── Hindi ────────────────────────────────────────────────
-            ("hi", "नमस्ते"),
-            ("hi", "मेरी मदद करो"),
-            ("hi", "मैं दुखी हूं"),
-            ("hi", "मेरा नाम मेर्ना है"),
-            ("hi", "मुझे नींद नहीं आती"),
-            # ── Chinese ──────────────────────────────────────────────
-            ("zh", "你好"),
-            ("zh", "帮帮我"),
-            ("zh", "我很难过"),
-            ("zh", "我叫Merna"),
-            ("zh", "我睡不着"),
-            # ── Japanese ─────────────────────────────────────────────
-            ("ja", "こんにちは"),
-            ("ja", "助けて"),
-            ("ja", "悲しい"),
-            ("ja", "私の名前はメルナです"),
-            ("ja", "眠れません"),
-            # ── Turkish ──────────────────────────────────────────────
-            ("tr", "merhaba"),
-            ("tr", "bana yardım et"),
-            ("tr", "üzgünüm"),
-            ("tr", "benim adım Merna"),
-            ("tr", "uyuyamıyorum"),
-            # ── Dutch ────────────────────────────────────────────────
-            ("nl", "hallo"),
-            ("nl", "help me"),
-            ("nl", "ik ben verdrietig"),
-            ("nl", "ik kan niet slapen"),
-            # ── Polish ───────────────────────────────────────────────
-            ("pl", "cześć"),
-            ("pl", "jestem smutny"),
-            ("pl", "mam na imię Merna"),
-            ("pl", "nie mogę spać"),
-            # ── Swedish (sw = Swahili in your model) ─────────────────
-            ("sw", "habari"),
-            ("sw", "nisaidie"),
-            ("sw", "nina huzuni"),
-            ("sw", "jina langu ni Merna"),
-            ("sw", "siwezi kulala"),
-            # ── Bulgarian ────────────────────────────────────────────
-            ("bg", "здравей"),
-            ("bg", "помогни ми"),
-            ("bg", "тъжен съм"),
-            ("bg", "казвам се Мерна"),
-            ("bg", "не мога да спя"),
-            # ── Greek ────────────────────────────────────────────────
-            ("el", "γεια"),
-            ("el", "βοήθησέ με"),
-            ("el", "είμαι λυπημένος"),
-            ("el", "με λένε Μέρνα"),
-            ("el", "δεν μπορώ να κοιμηθώ"),
-            # ── Thai ─────────────────────────────────────────────────
-            ("th", "สวัสดี"),
-            ("th", "ช่วยฉันด้วย"),
-            ("th", "ฉันเศร้า"),
-            ("th", "ชื่อของฉันคือเมอร์นา"),
-            ("th", "ฉันนอนไม่หลับ"),
-            # ── Urdu ─────────────────────────────────────────────────
-            ("ur", "ہیلو"),
-            ("ur", "میری مدد کرو"),
-            ("ur", "میں اداس ہوں"),
-            ("ur", "میرا نام مرنا ہے"),
-            ("ur", "مجھے نیند نہیں آتی"),
-            # ── Vietnamese ───────────────────────────────────────────
-            ("vi", "xin chào"),
-            ("vi", "giúp tôi với"),
-            ("vi", "tôi buồn"),
-            ("vi", "tên tôi là Merna"),
-            ("vi", "tôi không ngủ được"),
-        ]
+    detector = LanguageDetector()
+    samples = [
+        ("en", "my name is Merna"),
+        ("en", "Thnak you"),
+        ("ar", "السلام عليكم"),
+        ("ar", "ازيك"),
+        ("ar", "أشعر بالقلق الشديد ولا أستطيع النوم."),
+        ("fr", "Je me sens très anxieux et je ne peux pas dormir."),
+        ("es", "Me siento muy ansioso y no puedo dormir."),
+        ("en", "I'm having trouble sleeping"),
+        ("de", "Ich fühle mich sehr gestresst."),
+        ("hi", "मुझे बहुत चिंता हो रही है।"),
+        ("zh", "我最近感到非常焦虑。"),
+        ("en", "hi"),
+        ("en", "help me"),
+        ("en", "I feel sad"),
+        ("en", "my name is Merna"),
+        ("en", "I cannot sleep at night"),
+        # ── Arabic ───────────────────────────────────────────────
+        ("ar", "مرحبا"),
+        ("ar", "ساعدني"),
+        ("ar", "أنا حزين"),
+        ("ar", "اسمي مرنا"),
+        ("ar", "لا أستطيع النوم"),
+        # ── French ───────────────────────────────────────────────
+        ("fr", "bonjour"),
+        ("fr", "aide moi"),
+        ("fr", "je suis triste"),
+        ("fr", "je m'appelle Merna"),
+        ("fr", "je ne peux pas dormir"),
+        # ── Spanish ──────────────────────────────────────────────
+        ("es", "hola"),
+        ("es", "ayúdame"),
+        ("es", "me siento triste"),
+        ("es", "me llamo Merna"),
+        ("es", "no puedo dormir"),
+        # ── German ───────────────────────────────────────────────
+        ("de", "hallo"),
+        ("de", "hilf mir"),
+        ("de", "ich bin traurig"),
+        ("de", "ich heiße Merna"),
+        ("de", "ich kann nicht schlafen"),
+        # ── Italian ──────────────────────────────────────────────
+        ("it", "ciao"),
+        ("it", "aiutami"),
+        ("it", "mi sento triste"),
+        ("it", "mi chiamo Merna"),
+        ("it", "non riesco a dormire"),
+        # ── Portuguese ───────────────────────────────────────────
+        ("pt", "olá"),
+        ("pt", "me ajuda"),
+        ("pt", "estou triste"),
+        ("pt", "meu nome é Merna"),
+        ("pt", "não consigo dormir"),
+        # ── Russian ──────────────────────────────────────────────
+        ("ru", "привет"),
+        ("ru", "помоги мне"),
+        ("ru", "мне грустно"),
+        ("ru", "меня зовут Мерна"),
+        ("ru", "я не могу спать"),
+        # ── Hindi ────────────────────────────────────────────────
+        ("hi", "नमस्ते"),
+        ("hi", "मेरी मदद करो"),
+        ("hi", "मैं दुखी हूं"),
+        ("hi", "मेरा नाम मेर्ना है"),
+        ("hi", "मुझे नींद नहीं आती"),
+        # ── Chinese ──────────────────────────────────────────────
+        ("zh", "你好"),
+        ("zh", "帮帮我"),
+        ("zh", "我很难过"),
+        ("zh", "我叫Merna"),
+        ("zh", "我睡不着"),
+        # ── Japanese ─────────────────────────────────────────────
+        ("ja", "こんにちは"),
+        ("ja", "助けて"),
+        ("ja", "悲しい"),
+        ("ja", "私の名前はメルナです"),
+        ("ja", "眠れません"),
+        # ── Turkish ──────────────────────────────────────────────
+        ("tr", "merhaba"),
+        ("tr", "bana yardım et"),
+        ("tr", "üzgünüm"),
+        ("tr", "benim adım Merna"),
+        ("tr", "uyuyamıyorum"),
+        # ── Dutch ────────────────────────────────────────────────
+        ("nl", "hallo"),
+        ("nl", "help me"),
+        ("nl", "ik ben verdrietig"),
+        ("nl", "ik kan niet slapen"),
+        # ── Polish ───────────────────────────────────────────────
+        ("pl", "cześć"),
+        ("pl", "jestem smutny"),
+        ("pl", "mam na imię Merna"),
+        ("pl", "nie mogę spać"),
+        # ── Swedish (sw = Swahili in your model) ─────────────────
+        ("sw", "habari"),
+        ("sw", "nisaidie"),
+        ("sw", "nina huzuni"),
+        ("sw", "jina langu ni Merna"),
+        ("sw", "siwezi kulala"),
+        # ── Bulgarian ────────────────────────────────────────────
+        ("bg", "здравей"),
+        ("bg", "помогни ми"),
+        ("bg", "тъжен съм"),
+        ("bg", "казвам се Мерна"),
+        ("bg", "не мога да спя"),
+        # ── Greek ────────────────────────────────────────────────
+        ("el", "γεια"),
+        ("el", "βοήθησέ με"),
+        ("el", "είμαι λυπημένος"),
+        ("el", "με λένε Μέρνα"),
+        ("el", "δεν μπορώ να κοιμηθώ"),
+        # ── Thai ─────────────────────────────────────────────────
+        ("th", "สวัสดี"),
+        ("th", "ช่วยฉันด้วย"),
+        ("th", "ฉันเศร้า"),
+        ("th", "ชื่อของฉันคือเมอร์นา"),
+        ("th", "ฉันนอนไม่หลับ"),
+        # ── Urdu ─────────────────────────────────────────────────
+        ("ur", "ہیلو"),
+        ("ur", "میری مدد کرو"),
+        ("ur", "میں اداس ہوں"),
+        ("ur", "میرا نام مرنا ہے"),
+        ("ur", "مجھے نیند نہیں آتی"),
+        # ── Vietnamese ───────────────────────────────────────────
+        ("vi", "xin chào"),
+        ("vi", "giúp tôi với"),
+        ("vi", "tôi buồn"),
+        ("vi", "tên tôi là Merna"),
+        ("vi", "tôi không ngủ được"),
+    ]
 
-        print("\n=== Language Detection Test ===")
-        correct = 0
-        for true_code, text in samples:
-            r = detector.predict(text)
-            status = "✅" if r["code"] == true_code else "❌"
-            flag = " ⚠️ low confidence" if r["low_confidence"] else ""
-            print(f"  {status} [{r['code']}] {r['language']:<14} ({r['confidence']:.2%}){flag}")
-            print(f"       True: [{true_code}]  Input: {text[:60]}")
-            if r["low_confidence"]:
-                print(f"       Top guess was: [{r['top5'][0]['code']}] {r['top5'][0]['prob']:.2%}")
-            correct += r["code"] == true_code
+    print("\n=== Language Detection Test ===")
+    correct = 0
+    for true_code, text in samples:
+        r = detector.predict(text)
+        status = "✅" if r["code"] == true_code else "❌"
+        flag = " ⚠️ low confidence" if r["low_confidence"] else ""
+        print(f"  {status} [{r['code']}] {r['language']:<14} ({r['confidence']:.2%}){flag}")
+        print(f"       True: [{true_code}]  Input: {text[:60]}")
+        if r["low_confidence"]:
+            print(f"       Top guess was: [{r['top5'][0]['code']}] {r['top5'][0]['prob']:.2%}")
+        correct += r["code"] == true_code
 
-        print(f"\n  Accuracy: {correct}/{len(samples)} ({correct/len(samples)*100:.0f}%)")
+    print(f"\n  Accuracy: {correct}/{len(samples)} ({correct/len(samples)*100:.0f}%)")
