@@ -5,6 +5,15 @@ import time
 from typing import Any, Dict
 
 from modules.emotion_classifier import EmotionClassifier
+from modules.guardrails import (
+    check_crisis_input,
+    check_off_topic_task,
+    check_prompt_injection,
+    get_crisis_response,
+    get_off_topic_response,
+    get_prompt_injection_response,
+    sanitize_response,
+)
 from modules.intent_classifier import IntentClassifier
 from modules.language_detector import LanguageDetector
 from modules.rag_pipeline import RAGPipeline
@@ -113,8 +122,51 @@ class Orchestrator:
             translation = {"translated": message, "was_translated": False}
 
         english_text = translation["translated"]
-        logger.info(f"Translation complete. Was translated: {translation.get('was_translated', False)}")
-
+        logger.info(
+            f"Translation complete. Was translated: {translation.get('was_translated', False)}"
+        )
+        # ── Guardrail: prompt injection detection ───────────────────────────────────
+        if check_prompt_injection(english_text):
+            translated_response = self.translator.translate_from_english(
+                text=get_prompt_injection_response(),
+                target_lang=lang["language"],
+                target_lang_code=lang["code"],
+            )
+            logger.info(f"Chat request complete in {(time.perf_counter() - t0) * 1000:.1f} ms.")
+            return {
+                "answer": translated_response["translated"],
+                "language": lang,
+                "translation": translation,
+                "intent": {
+                    "intent": "out_of_scope",
+                    "confidence": "high",
+                    "reasoning": "Prompt injection attempt detected by guardrail.",
+                },
+                "emotion": None,
+                "sources": [],
+                "used_rag": False,
+            }
+        # ── Guardrail: off-topic task detection ─────────────────────────────────────
+        if check_off_topic_task(english_text):
+            translated_response = self.translator.translate_from_english(
+                text=get_off_topic_response(),
+                target_lang=lang["language"],
+                target_lang_code=lang["code"],
+            )
+            logger.info(f"Chat request complete in {(time.perf_counter() - t0) * 1000:.1f} ms.")
+            return {
+                "answer": translated_response["translated"],
+                "language": lang,
+                "translation": translation,
+                "intent": {
+                    "intent": "out_of_scope",
+                    "confidence": "high",
+                    "reasoning": "Off-topic task detected by guardrail.",
+                },
+                "emotion": None,
+                "sources": [],
+                "used_rag": False,
+            }
         # step 3 - classify intent
         logger.info("Step 3/6: Classifying intent...")
         intent_result = self.intent_clf.predict(message)
@@ -148,6 +200,24 @@ class Orchestrator:
             )
         logger.info(f"Emotion: {emotion['emotion']} ({emotion['confidence']:.0%})")
 
+        # ── Guardrail: crisis detection ─────────────────────────────────────────────
+        if check_crisis_input(english_text, emotion):
+            crisis_msg = get_crisis_response(lang["code"])
+            translated_crisis = self.translator.translate_from_english(
+                text=crisis_msg,
+                target_lang=lang["language"],
+                target_lang_code=lang["code"],
+            )
+            logger.info(f"Chat request complete in {(time.perf_counter() - t0) * 1000:.1f} ms.")
+            return {
+                "answer": translated_crisis["translated"],
+                "language": lang,
+                "translation": translation,
+                "intent": intent_result,
+                "emotion": emotion,
+                "sources": [],
+                "used_rag": False,
+            }
         # step 6 - RAG
         logger.info("Step 6/6: Retrieving sources and generating RAG answer...")
         if self.rag is None:
@@ -174,6 +244,8 @@ class Orchestrator:
         except Exception:
             logger.error("RAG pipeline failed unexpectedly.", exc_info=True)
             raise
+        # ── Guardrail: sanitize output ──────────────────────────────────────────────
+        result["answer"] = sanitize_response(result["answer"])
 
         if not result.get("sources"):
             logger.warning("RAG returned zero sources for a mental health question.")
