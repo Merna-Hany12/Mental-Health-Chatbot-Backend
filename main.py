@@ -28,6 +28,10 @@ from pydantic import BaseModel, Field
 
 from orchestrator import Orchestrator
 
+
+from telemetry import setup_telemetry
+request_metric, feedback_metric, latency_metric = setup_telemetry()
+
 # ── Load env ──────────────────────────────────────────────────────────────────
 load_dotenv()
 logging.basicConfig(
@@ -128,6 +132,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
     Language Detection → Intent Classification →
     (Emotion Classification) → (RAG Answer)
     """
+    request_metric.add(1, {"endpoint": "/api/chat"})
     t0 = time.perf_counter()
     try:
         logger.info(f"/api/chat received message ({len(req.message)} chars).")
@@ -137,6 +142,9 @@ async def chat(req: ChatRequest) -> ChatResponse:
         result = bot.chat(req.message)
         latency = round((time.perf_counter() - t0) * 1000, 1)
         logger.info(f"/api/chat pipeline finished in {latency} ms.")
+
+        detected_intent = result.get("intent", {}).get("intent", "unknown")
+        latency_metric.record((time.perf_counter() - t0), {"intent": detected_intent})
 
         if not req.show_sources:
             result["sources"] = []
@@ -160,8 +168,11 @@ async def chat(req: ChatRequest) -> ChatResponse:
 @app.post("/api/feedback")
 async def feedback(req: FeedbackRequest) -> JSONResponse:
     """Accept thumbs up/down feedback from the frontend."""
+    request_metric.add(1, {"endpoint": "/api/feedback"})
     if req.vote not in ("up", "down"):
         logger.warning(f"Unexpected vote value received: {req.vote!r}")
+        feedback_metric.add(1, {"vote": req.vote})
+        
     logger.info(f"Feedback received: vote={req.vote}, msg_len={len(req.user_message)}")
     return JSONResponse({"status": "ok"})
 

@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  # 1. Your FastAPI Chatbot Backend Application
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Tells OpenTelemetry Python SDK to send metrics to the otel-collector container
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+    depends_on:
+      - otel-collector
+
+  # 2. The OpenTelemetry Collector Proxy Sidecar
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    volumes:
+      # Injects your Axiom routing manual into the collector container
+      - ./otel-collector-config.yaml:/etc/otelcol/config.yaml
+    ports:
+      - "4317:4317" # Opens gRPC port for your backend to stream metrics locally
+    env_file:
+      - .env
