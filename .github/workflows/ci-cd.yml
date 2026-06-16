@@ -92,13 +92,8 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
-      - name: Set image name
-        run: echo "IMAGE_NAME=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-
       - name: Deploy to Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: |
-          railway service connect "${{ secrets.RAILWAY_SERVICE_NAME }}"
-          railway variables set IMAGE="${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          railway redeploy --service "${{ secrets.RAILWAY_SERVICE_NAME }}" --yes
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE_NAME }}
+        run: railway redeploy --service "$RAILWAY_SERVICE" --yes
