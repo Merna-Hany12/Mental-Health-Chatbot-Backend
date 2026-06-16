@@ -1,13 +1,61 @@
-.venv
+# Git
 .git
 .github
-_pycache_
-*.pyc
-*.pyo
-.pytest_cache
-emotion_results/
-.env
+.gitignore
+.gitattributes
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing
 tests/
-.pre-commit-config.yaml
-.ruff_cache/
 .pytest_cache/
+.coverage
+htmlcov/
+results.xml
+
+# Linters / formatters
+.ruff_cache/
+.mypy_cache/
+
+# IDEs
+.vscode/
+.idea/
+
+# Environment variables
+.env
+.env.*
+
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation (optional)
+README.md
+
+# CI/CD
+.pre-commit-config.yaml
+
+# Logs
+*.log
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+
+result.xml
+result.txt
+train_models.py
