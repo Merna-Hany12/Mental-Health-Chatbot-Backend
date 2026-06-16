@@ -27,9 +27,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from orchestrator import Orchestrator
-
-
 from telemetry import setup_telemetry
+
 request_metric, feedback_metric, latency_metric = setup_telemetry()
 
 # ── Load env ──────────────────────────────────────────────────────────────────
@@ -172,7 +171,7 @@ async def feedback(req: FeedbackRequest) -> JSONResponse:
     if req.vote not in ("up", "down"):
         logger.warning(f"Unexpected vote value received: {req.vote!r}")
         feedback_metric.add(1, {"vote": req.vote})
-        
+
     logger.info(f"Feedback received: vote={req.vote}, msg_len={len(req.user_message)}")
     return JSONResponse({"status": "ok"})
 
