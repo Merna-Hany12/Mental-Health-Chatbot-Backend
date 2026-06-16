@@ -17,13 +17,8 @@ import logging
 import re
 from pathlib import Path
 from typing import Any, Dict
-
 import joblib
-from sklearn.calibration import CalibratedClassifierCV
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics import accuracy_score, classification_report
 from sklearn.pipeline import Pipeline
-from sklearn.svm import LinearSVC
 
 logger = logging.getLogger(__name__)
 
@@ -72,123 +67,6 @@ def preprocess(text: str) -> str:
     return text
 
 
-# ── Model Building ─────────────────────────────────────────────────────────────
-def build_pipeline() -> Pipeline:
-    """
-    Character-level TF-IDF (2-4 grams) + LinearSVC wrapped in calibration.
-
-    Why char n-grams?
-      - Script-agnostic: works for Arabic, CJK, Devanagari, Latin, Cyrillic etc.
-      - Captures morpheme patterns that distinguish similar languages (es/pt, de/nl)
-      - Robust to unseen words and typos
-    """
-    word_tfidf = TfidfVectorizer(
-        analyzer="word",
-        ngram_range=(1, 2),
-        max_features=100_000,
-        sublinear_tf=True,
-        min_df=2,
-        lowercase=True,
-        strip_accents=None,  # keep diacritics — they are language signals
-    )
-
-    char_tfidf = TfidfVectorizer(
-        analyzer="char_wb",  # word-boundary-aware char n-grams
-        ngram_range=(2, 4),
-        max_features=200_000,
-        sublinear_tf=True,
-        min_df=2,
-        lowercase=True,
-        strip_accents=None,
-    )
-
-    from sklearn.pipeline import FeatureUnion
-
-    features = FeatureUnion(
-        [
-            ("word_tfidf", word_tfidf),
-            ("char_tfidf", char_tfidf),
-        ]
-    )
-
-    return Pipeline(
-        [
-            ("features", features),
-            (
-                "clf",
-                CalibratedClassifierCV(
-                    estimator=LinearSVC(C=1.0, max_iter=2000, dual=True, random_state=42),
-                    cv=3,
-                    method="sigmoid",
-                ),
-            ),
-        ]
-    )
-
-
-# ── Training ───────────────────────────────────────────────────────────────────
-def train(save: bool = True) -> Pipeline:
-    """
-    Load the Language Identification dataset, train the pipeline,
-    optionally save to disk, and return the fitted pipeline.
-
-    The dataset labels are already ISO codes ("en", "ar", etc.)
-    We use them directly as y — no mapping needed.
-    """
-    try:
-        from datasets import load_dataset
-    except ImportError:
-        raise ImportError("Run: pip install datasets")
-
-    logger.info("Loading papluca/language-identification …")
-    ds_train = load_dataset("papluca/language-identification", split="train")
-    ds_test = load_dataset("papluca/language-identification", split="test")
-
-    df_train = ds_train.to_pandas()
-    df_test = ds_test.to_pandas()
-
-    # ── Filter to supported languages ────────────────────────────────────────
-    supported = set(LANG_NAMES.keys())
-    df_train = df_train[df_train["labels"].isin(supported)].copy()
-    df_test = df_test[df_test["labels"].isin(supported)].copy()
-
-    # ── Preprocess ────────────────────────────────────────────────────────────
-    df_train["text_clean"] = df_train["text"].apply(preprocess)
-    df_test["text_clean"] = df_test["text"].apply(preprocess)
-
-    X_train, y_train = df_train["text_clean"].tolist(), df_train["labels"].tolist()
-    X_test, y_test = df_test["text_clean"].tolist(), df_test["labels"].tolist()
-
-    logger.info(f"Train : {len(X_train):,} samples | {len(set(y_train))} languages")
-    logger.info(f"Test  : {len(X_test):,}  samples")
-
-    # ── Fit ───────────────────────────────────────────────────────────────────
-    pipeline = build_pipeline()
-    logger.info("Fitting pipeline …")
-    pipeline.fit(X_train, y_train)
-
-    # ── Evaluate ──────────────────────────────────────────────────────────────
-    y_pred = pipeline.predict(X_test)
-    acc = accuracy_score(y_test, y_pred)
-    logger.info(f"\nTest Accuracy: {acc*100:.4f}%")
-    logger.info(
-        "\n"
-        + classification_report(
-            y_test,
-            y_pred,
-            target_names=[LANG_NAMES[c] for c in sorted(set(y_test))],
-            digits=4,
-        )
-    )
-
-    # ── Save ──────────────────────────────────────────────────────────────────
-    if save:
-        MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-        joblib.dump(pipeline, MODEL_PATH)
-        logger.info(f"Model saved → {MODEL_PATH}")
-
-    return pipeline
-
 
 # ── Detector Class ─────────────────────────────────────────────────────────────
 class LanguageDetector:
@@ -209,12 +87,11 @@ class LanguageDetector:
             self._pipeline = joblib.load(self._model_path)
         else:
             logger.warning("No saved model found — training from scratch …")
-            self._pipeline = train(save=True)
 
     # ── Public API ────────────────────────────────────────────────────────────
     def predict(self, text: str, threshold: float = CONFIDENCE_THRESHOLD) -> Dict[str, Any]:
         """
-        Classify the language of *text*.
+        Classify the language of text.
 
         Parameters
         ----------

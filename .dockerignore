@@ -1,0 +1,13 @@
+.venv
+.git
+.github
+_pycache_
+*.pyc
+*.pyo
+.pytest_cache
+emotion_results/
+.env
+tests/
+.pre-commit-config.yaml
+.ruff_cache/
+.pytest_cache/
