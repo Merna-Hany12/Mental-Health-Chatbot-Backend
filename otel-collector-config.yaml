@@ -1,9 +1,3 @@
-# otel-collector-config.yaml
-# ─────────────────────────────────────────────────────────────────────────────
-# Receives metrics AND logs from the FastAPI app over gRPC (port 4317),
-# batches them, then forwards to Axiom over HTTPS.
-# ─────────────────────────────────────────────────────────────────────────────
-
 receivers:
   otlp:
     protocols:
@@ -19,19 +13,14 @@ exporters:
   otlphttp/axiom:
     endpoint: "https://api.axiom.co"
     headers:
-      Authorization: "Bearer ${env:AXIOM_TOKEN}"
-      X-Axiom-Dataset: "${env:AXIOM_DATASET}"
+      authorization: "Bearer ${env:AXIOM_TOKEN}"
+      x-axiom-dataset: "${env:AXIOM_DATASET}"
 
   debug:
     verbosity: detailed
 
 service:
   pipelines:
-    metrics:
-      receivers:  [otlp]
-      processors: [batch]
-      exporters:  [otlphttp/axiom, debug]
-
     logs:
       receivers:  [otlp]
       processors: [batch]
