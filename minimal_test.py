@@ -5,14 +5,14 @@ Run this directly: python minimal_test.py
 
 import logging
 
-logging.basicConfig(level=logging.DEBUG, format="%(levelname)s:%(name)s: %(message)s")
-
-import time
+from opentelemetry._logs import set_logger_provider
+from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
 from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor, ConsoleLogExporter
-from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
 from opentelemetry.sdk.resources import Resource
-from opentelemetry._logs import set_logger_provider
+
+logging.basicConfig(level=logging.DEBUG, format="%(levelname)s:%(name)s: %(message)s")
+
 
 print("=" * 60)
 print("STEP 1: Setting up LoggerProvider with OTLP gRPC exporter")

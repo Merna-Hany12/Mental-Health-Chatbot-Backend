@@ -9,7 +9,7 @@ Endpoints:
     POST /api/index     → Trigger dataset indexing (admin)
 
 Run:
-    .venv\Scripts\Activate.ps1
+    .venv\\Scripts\\Activate.ps1
     uvicorn main:app
 """
 

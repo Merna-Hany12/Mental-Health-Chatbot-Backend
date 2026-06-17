@@ -66,8 +66,6 @@ def setup_telemetry():
 
 # ── Smoke test ────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    import time
-
     # Surface gRPC export errors instead of failing silently
     logging.getLogger("opentelemetry.exporter.otlp.proto.grpc.exporter").setLevel(logging.DEBUG)
     logging.basicConfig(level=logging.WARNING)
