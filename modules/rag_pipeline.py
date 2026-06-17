@@ -30,7 +30,7 @@ Relevant knowledge:
 
 
 def format_docs(docs):
-    return "\n\n---\n\n".join(f"[{i+1}] {get_doc_text(doc)}" for i, doc in enumerate(docs))
+    return "\n\n---\n\n".join(f"[{i + 1}] {get_doc_text(doc)}" for i, doc in enumerate(docs))
 
 
 def get_doc_text(doc):

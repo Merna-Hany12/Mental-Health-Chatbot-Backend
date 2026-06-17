@@ -60,6 +60,9 @@ jobs:
         with:
           lfs: true
 
+      - name: Set image name
+        run: echo "IMAGE_NAME=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -82,22 +85,20 @@ jobs:
           cache-to: type=gha,mode=max
 
   deploy:
-    name: Deploy to Railway
+    name: Deploy to Hugging Face Space
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          lfs: true
+          fetch-depth: 0
 
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Deploy to Railway
+      - name: Push to Hugging Face Space
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --service "${{ secrets.RAILWAY_SERVICE_NAME }}"
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global user.email "ci@github.com"
+          git config --global user.name "GitHub Actions"
+          git push https://mernahany666:$HF_TOKEN@huggingface.co/spaces/mernahany666/mental-health-chatbot-backend main --force

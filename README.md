@@ -1,3 +1,13 @@
+
+---
+title: Mental Health Chatbot Backend
+emoji: 🧠
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 8000
+pinned: false
+---
 # RAG-Based Mental Health Chatbot 🧠💬
 
 ## Table of Contents

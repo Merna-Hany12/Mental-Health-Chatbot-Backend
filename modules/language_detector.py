@@ -308,4 +308,4 @@ if __name__ == "__main__":
             print(f"       Top guess was: [{r['top5'][0]['code']}] {r['top5'][0]['prob']:.2%}")
         correct += r["code"] == true_code
 
-    print(f"\n  Accuracy: {correct}/{len(samples)} ({correct/len(samples)*100:.0f}%)")
+    print(f"\n  Accuracy: {correct}/{len(samples)} ({correct / len(samples) * 100:.0f}%)")

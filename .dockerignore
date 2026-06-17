@@ -43,8 +43,6 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Documentation (optional)
-README.md
 
 # CI/CD
 .pre-commit-config.yaml
@@ -56,6 +54,5 @@ README.md
 Dockerfile*
 docker-compose*.yml
 
-result.xml
 result.txt
 train_models.py

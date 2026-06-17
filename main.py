@@ -63,7 +63,7 @@ app.add_middleware(
         "http://localhost:80",
         "http://localhost:3000",
         "http://127.0.0.1:5500",
-        "https://merna-hany12.github.io/chatbot-frontend",
+        "https://merna-hany12.github.io",
     ],
     allow_credentials=True,
     allow_methods=["*"],
