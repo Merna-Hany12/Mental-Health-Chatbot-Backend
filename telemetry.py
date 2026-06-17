@@ -44,10 +44,10 @@ def setup_telemetry():
     logging.getLogger().addHandler(otel_handler)
 
     # Loggers — each name becomes a filterable "scope" in Axiom
-    request_logger  = logging.getLogger("serenity.request")
+    request_logger = logging.getLogger("serenity.request")
     feedback_logger = logging.getLogger("serenity.feedback")
-    chat_logger      = logging.getLogger("serenity.chat")
-    system_logger      = logging.getLogger("serenity.system")
+    chat_logger = logging.getLogger("serenity.chat")
+    system_logger = logging.getLogger("serenity.system")
 
     # Explicitly attach handler + level to each logger too — belt and suspenders,
     # avoids relying solely on propagation to root in case something resets it
@@ -96,37 +96,37 @@ if __name__ == "__main__":
     chat_logger.info(
         "chat_completed",
         extra={
-            "language":       "English",
-            "emotion":        "sadness",
-            "intent":         "asking_mental_health_question",
-            "latency_ms":     842.3,
-            "used_rag":       True,
+            "language": "English",
+            "emotion": "sadness",
+            "intent": "asking_mental_health_question",
+            "latency_ms": 842.3,
+            "used_rag": True,
             "message_length": 87,
-            "session_id":     "test-session-001",
+            "session_id": "test-session-001",
         },
     )
     chat_logger.info(
         "chat_completed",
         extra={
-            "language":       "Arabic",
-            "emotion":        "fear",
-            "intent":         "asking_mental_health_question",
-            "latency_ms":     910.1,
-            "used_rag":       True,
+            "language": "Arabic",
+            "emotion": "fear",
+            "intent": "asking_mental_health_question",
+            "latency_ms": 910.1,
+            "used_rag": True,
             "message_length": 64,
-            "session_id":     "test-session-002",
+            "session_id": "test-session-002",
         },
     )
     chat_logger.info(
         "chat_completed",
         extra={
-            "language":       "English",
-            "emotion":        "none",
-            "intent":         "greeting",
-            "latency_ms":     48.5,
-            "used_rag":       False,
+            "language": "English",
+            "emotion": "none",
+            "intent": "greeting",
+            "latency_ms": 48.5,
+            "used_rag": False,
             "message_length": 5,
-            "session_id":     "test-session-003",
+            "session_id": "test-session-003",
         },
     )
 

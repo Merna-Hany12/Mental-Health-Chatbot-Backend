@@ -119,7 +119,9 @@ def warm_up_orchestrator() -> None:
         get_orchestrator().warm_up()
         warmup_ms = round((time.perf_counter() - t0) * 1000, 1)
         logger.info(f"Application warmup complete in {warmup_ms} ms.")
-        system_logger.info("app_lifecycle", extra={"event": "warmup_complete", "warmup_ms": warmup_ms})
+        system_logger.info(
+            "app_lifecycle", extra={"event": "warmup_complete", "warmup_ms": warmup_ms}
+        )
     except Exception:
         logger.exception(
             "Application warmup failed. The first chat request will retry initialization."
@@ -136,6 +138,7 @@ def shutdown_telemetry() -> None:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest) -> ChatResponse:
     """
@@ -150,16 +153,15 @@ async def chat(req: ChatRequest) -> ChatResponse:
         bot = get_orchestrator()
         result = bot.chat(req.message)
 
-        latency_s  = time.perf_counter() - t0
+        latency_s = time.perf_counter() - t0
         latency_ms = round(latency_s * 1000, 1)
         logger.info(f"/api/chat pipeline finished in {latency_ms} ms.")
 
         # ── Extract classification results ────────────────────────────────────
-        detected_intent   = result.get("intent", {}).get("intent", "unknown")
+        detected_intent = result.get("intent", {}).get("intent", "unknown")
         detected_language = result.get("language", {}).get("language", "unknown")
-        detected_emotion  = (
-            result.get("emotion", {}).get("emotion", "none")
-            if result.get("emotion") else "none"
+        detected_emotion = (
+            result.get("emotion", {}).get("emotion", "none") if result.get("emotion") else "none"
         )
 
         # ── Raw server event ───────────────────────────────────────────────────
@@ -169,13 +171,13 @@ async def chat(req: ChatRequest) -> ChatResponse:
         chat_logger.info(
             "chat_completed",
             extra={
-                "language":       detected_language,
-                "emotion":        detected_emotion,
-                "intent":         detected_intent,
-                "latency_ms":     latency_ms,
-                "used_rag":       result["used_rag"],
+                "language": detected_language,
+                "emotion": detected_emotion,
+                "intent": detected_intent,
+                "latency_ms": latency_ms,
+                "used_rag": result["used_rag"],
                 "message_length": len(req.message),
-                "session_id":     req.session_id or "anonymous",
+                "session_id": req.session_id or "anonymous",
             },
         )
 
@@ -194,6 +196,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
 
     except Exception as e:
         import traceback
+
         logger.error(f"Chat endpoint error: {e}\n{traceback.format_exc()}")
         request_logger.info("http_request", extra={"endpoint": "/api/chat", "status": 500})
         system_logger.error("app_lifecycle", extra={"event": "chat_error", "error": str(e)})
@@ -212,10 +215,10 @@ async def feedback(req: FeedbackRequest) -> JSONResponse:
     feedback_logger.info(
         "feedback_vote",
         extra={
-            "vote":             req.vote,
-            "message_length":   len(req.user_message),
-            "response_length":  len(req.bot_response),
-            "session_id":       req.session_id or "anonymous",
+            "vote": req.vote,
+            "message_length": len(req.user_message),
+            "response_length": len(req.bot_response),
+            "session_id": req.session_id or "anonymous",
         },
     )
 
@@ -258,8 +261,16 @@ async def modules_info() -> JSONResponse:
                     "name": "Language Detector",
                     "tech": "TF-IDF (char n-grams) + Logistic Regression",
                     "languages": [
-                        "English", "Arabic", "French", "Spanish", "German",
-                        "Italian", "Portuguese", "Russian", "Turkish", "Hindi",
+                        "English",
+                        "Arabic",
+                        "French",
+                        "Spanish",
+                        "German",
+                        "Italian",
+                        "Portuguese",
+                        "Russian",
+                        "Turkish",
+                        "Hindi",
                     ],
                 },
                 {
@@ -273,8 +284,11 @@ async def modules_info() -> JSONResponse:
                     "name": "Intent Classifier",
                     "tech": "Few-shot prompting via Groq LLM",
                     "intents": [
-                        "greeting", "goodbye", "gratitude",
-                        "asking_mental_health_question", "out_of_scope",
+                        "greeting",
+                        "goodbye",
+                        "gratitude",
+                        "asking_mental_health_question",
+                        "out_of_scope",
                     ],
                 },
                 {

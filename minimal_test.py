@@ -2,7 +2,9 @@
 Minimal isolated test — bypasses telemetry.py entirely.
 Run this directly: python minimal_test.py
 """
+
 import logging
+
 logging.basicConfig(level=logging.DEBUG, format="%(levelname)s:%(name)s: %(message)s")
 
 import time

@@ -34,9 +34,7 @@ def send_events(events: list[dict]) -> None:
         return
     try:
         payload = json.dumps(events).encode("utf-8")
-        client.ingest(
-            _get_dataset(), payload, ContentType.JSON, ContentEncoding.IDENTITY
-        )
+        client.ingest(_get_dataset(), payload, ContentType.JSON, ContentEncoding.IDENTITY)
     except Exception as e:
         logger.warning("Failed to send events to Axiom: %s", e)
 
