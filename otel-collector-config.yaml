@@ -10,22 +10,22 @@ processors:
     send_batch_size: 512
 
 exporters:
-  otlphttp/axiom:
+  otlp_http/axiom:
     endpoint: "https://api.axiom.co"
     headers:
       authorization: "Bearer ${env:AXIOM_TOKEN}"
       x-axiom-dataset: "${env:AXIOM_DATASET}"
 
   debug:
-    verbosity: detailed
+    verbosity: normal
 
 service:
   pipelines:
     logs:
       receivers:  [otlp]
       processors: [batch]
-      exporters:  [otlphttp/axiom, debug]
+      exporters:  [otlp_http/axiom, debug]
     metrics:
       receivers:  [otlp]
       processors: [batch]
-      exporters:  [otlphttp/axiom, debug]
+      exporters:  [otlp_http/axiom, debug]

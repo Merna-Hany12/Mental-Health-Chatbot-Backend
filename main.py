@@ -26,7 +26,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from orchestrator import Orchestrator
-from telemetry import setup_telemetry, timed_histogram  # 💡 Imported context manager tool
+from telemetry import log_chat_event, setup_telemetry, timed_histogram
 
 # ── Load env ──────────────────────────────────────────────────────────────────
 load_dotenv()
@@ -38,7 +38,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ── Telemetry Initialization ──────────────────────────────────────────────────
-# 💡 Captures the single metrics dictionary cleanly without unpacking errors!
+#  Captures the single metrics dictionary cleanly without unpacking errors!
 METRICS = setup_telemetry()
 
 # ── App ───────────────────────────────────────────────────────────────────────
@@ -129,7 +129,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
     t0 = time.perf_counter()
     logger.info(f"/api/chat received message ({len(req.message)} chars).")
 
-    # 🧠 Use your custom context manager to measure absolute pipeline duration in seconds
+    #  Use your custom context manager to measure absolute pipeline duration in seconds
     with timed_histogram(METRICS["http_request_duration"], {"endpoint": "/api/chat"}):
         try:
             bot = get_orchestrator()
@@ -147,7 +147,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
                 else "none"
             )
 
-            # ── 📊 Core OTel Metric Registrations ──────────────────────────────────
+            # ──  Core OTel Metric Registrations ──────────────────────────────────
             METRICS["http_requests"].add(1, {"endpoint": "/api/chat", "status": "200"})
             METRICS["language_detected"].add(1, {"language": detected_language})
             METRICS["intent_classified"].add(1, {"intent": detected_intent})
@@ -158,6 +158,17 @@ async def chat(req: ChatRequest) -> ChatResponse:
                 METRICS["llm_calls"].add(1, {"route": "rag_triggered"})
             else:
                 METRICS["llm_calls"].add(1, {"route": "general_response"})
+
+            # ── Direct Axiom log event (latency + NLP fields) ────────────────
+            log_chat_event(
+                latency_ms=latency_ms,
+                language=detected_language,
+                emotion=detected_emotion,
+                intent=detected_intent,
+                used_rag=result.get("used_rag", False),
+                message_length=len(req.message),
+                session_id=req.session_id or "",
+            )
 
             if not req.show_sources:
                 result["sources"] = []
@@ -173,7 +184,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
             )
 
         except Exception as e:
-            # 🛑 Register the exact platform breakdown metric
+            #  Register the exact platform breakdown metric
             METRICS["http_requests"].add(1, {"endpoint": "/api/chat", "status": "500"})
             METRICS["http_errors"].add(1, {"endpoint": "/api/chat"})
 
@@ -190,7 +201,7 @@ async def feedback(req: FeedbackRequest) -> JSONResponse:
     """Accept thumbs up/down feedback from the frontend."""
     METRICS["http_requests"].add(1, {"endpoint": "/api/feedback", "status": "200"})
 
-    # 📊 Record the feedback choice straight to your OTel Counter metric
+    # Record the feedback choice straight to your OTel Counter metric
     if req.vote in ("up", "down"):
         METRICS["feedback_votes"].add(1, {"vote": req.vote})
         logger.info(f"Feedback metric recorded: vote={req.vote}")
