@@ -6,7 +6,6 @@ Endpoints:
     POST /api/feedback  → User feedback
     GET  /api/health    → Health check
     GET  /api/modules   → Module status
-    POST /api/index     → Trigger dataset indexing (admin)
 
 Run:
     .venv\\Scripts\\Activate.ps1
@@ -27,16 +26,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from orchestrator import Orchestrator
-from telemetry import setup_telemetry
-
-# ── Telemetry (raw event loggers — no pre-aggregation) ─────────────────────────
-(
-    request_logger,
-    feedback_logger,
-    chat_logger,
-    system_logger,
-    _logger_provider,
-) = setup_telemetry()
+from telemetry import setup_telemetry, timed_histogram  # 💡 Imported context manager tool
 
 # ── Load env ──────────────────────────────────────────────────────────────────
 load_dotenv()
@@ -46,6 +36,10 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+# ── Telemetry Initialization ──────────────────────────────────────────────────
+# 💡 Captures the single metrics dictionary cleanly without unpacking errors!
+METRICS = setup_telemetry()
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(
@@ -113,27 +107,14 @@ def get_orchestrator() -> Orchestrator:
 @app.on_event("startup")
 def warm_up_orchestrator() -> None:
     """Load models and connect external services before the first chat request."""
-    t0 = time.perf_counter()
     logger.info("Starting application warmup...")
     try:
         get_orchestrator().warm_up()
-        warmup_ms = round((time.perf_counter() - t0) * 1000, 1)
-        logger.info(f"Application warmup complete in {warmup_ms} ms.")
-        system_logger.info(
-            "app_lifecycle", extra={"event": "warmup_complete", "warmup_ms": warmup_ms}
-        )
+        logger.info("Application warmup complete.")
     except Exception:
         logger.exception(
             "Application warmup failed. The first chat request will retry initialization."
         )
-        system_logger.error("app_lifecycle", extra={"event": "warmup_failed"})
-
-
-@app.on_event("shutdown")
-def shutdown_telemetry() -> None:
-    """Flush and close the OTel log exporter cleanly on app exit."""
-    system_logger.info("app_lifecycle", extra={"event": "graceful_shutdown"})
-    _logger_provider.shutdown()
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -143,86 +124,79 @@ def shutdown_telemetry() -> None:
 async def chat(req: ChatRequest) -> ChatResponse:
     """
     Main chat endpoint.
-    Runs the full pipeline:
-    Language Detection → Intent Classification → (Emotion Classification) → (RAG Answer)
+    Runs the full pipeline with live end-to-end telemetry profiling.
     """
     t0 = time.perf_counter()
+    logger.info(f"/api/chat received message ({len(req.message)} chars).")
 
-    try:
-        logger.info(f"/api/chat received message ({len(req.message)} chars).")
-        bot = get_orchestrator()
-        result = bot.chat(req.message)
+    # 🧠 Use your custom context manager to measure absolute pipeline duration in seconds
+    with timed_histogram(METRICS["http_request_duration"], {"endpoint": "/api/chat"}):
+        try:
+            bot = get_orchestrator()
+            result = bot.chat(req.message)
 
-        latency_s = time.perf_counter() - t0
-        latency_ms = round(latency_s * 1000, 1)
-        logger.info(f"/api/chat pipeline finished in {latency_ms} ms.")
+            latency_ms = round((time.perf_counter() - t0) * 1000, 1)
+            logger.info(f"/api/chat pipeline finished in {latency_ms} ms.")
 
-        # ── Extract classification results ────────────────────────────────────
-        detected_intent = result.get("intent", {}).get("intent", "unknown")
-        detected_language = result.get("language", {}).get("language", "unknown")
-        detected_emotion = (
-            result.get("emotion", {}).get("emotion", "none") if result.get("emotion") else "none"
-        )
+            # Extract granular fields
+            detected_intent = result.get("intent", {}).get("intent", "unknown")
+            detected_language = result.get("language", {}).get("language", "unknown")
+            detected_emotion = (
+                result.get("emotion", {}).get("emotion", "none")
+                if result.get("emotion")
+                else "none"
+            )
 
-        # ── Raw server event ───────────────────────────────────────────────────
-        request_logger.info("http_request", extra={"endpoint": "/api/chat", "status": 200})
+            # ── 📊 Core OTel Metric Registrations ──────────────────────────────────
+            METRICS["http_requests"].add(1, {"endpoint": "/api/chat", "status": "200"})
+            METRICS["language_detected"].add(1, {"language": detected_language})
+            METRICS["intent_classified"].add(1, {"intent": detected_intent})
+            METRICS["emotion_detected"].add(1, {"emotion": detected_emotion})
+            METRICS["input_length"].record(len(req.message))
 
-        # ── Raw model/NLP event — full context, one row, no aggregation ───────
-        chat_logger.info(
-            "chat_completed",
-            extra={
-                "language": detected_language,
-                "emotion": detected_emotion,
-                "intent": detected_intent,
-                "latency_ms": latency_ms,
-                "used_rag": result["used_rag"],
-                "message_length": len(req.message),
-                "session_id": req.session_id or "anonymous",
-            },
-        )
+            if result.get("used_rag"):
+                METRICS["llm_calls"].add(1, {"route": "rag_triggered"})
+            else:
+                METRICS["llm_calls"].add(1, {"route": "general_response"})
 
-        if not req.show_sources:
-            result["sources"] = []
+            if not req.show_sources:
+                result["sources"] = []
 
-        return ChatResponse(
-            answer=result["answer"],
-            language=result["language"],
-            intent=result["intent"],
-            emotion=result.get("emotion"),
-            sources=result.get("sources", []),
-            used_rag=result["used_rag"],
-            latency_ms=latency_ms,
-        )
+            return ChatResponse(
+                answer=result["answer"],
+                language=result["language"],
+                intent=result["intent"],
+                emotion=result.get("emotion"),
+                sources=result.get("sources", []),
+                used_rag=result["used_rag"],
+                latency_ms=latency_ms,
+            )
 
-    except Exception as e:
-        import traceback
+        except Exception as e:
+            # 🛑 Register the exact platform breakdown metric
+            METRICS["http_requests"].add(1, {"endpoint": "/api/chat", "status": "500"})
+            METRICS["http_errors"].add(1, {"endpoint": "/api/chat"})
 
-        logger.error(f"Chat endpoint error: {e}\n{traceback.format_exc()}")
-        request_logger.info("http_request", extra={"endpoint": "/api/chat", "status": 500})
-        system_logger.error("app_lifecycle", extra={"event": "chat_error", "error": str(e)})
-        raise HTTPException(status_code=500, detail=str(e))
+            # Check for critical keywords to flag system safety issues
+            if detected_intent == "crisis":
+                METRICS["crisis_escalation"].add(1, {"crisis_type": "self_harm"})
+
+            logger.error(f"Chat endpoint error: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/feedback")
 async def feedback(req: FeedbackRequest) -> JSONResponse:
     """Accept thumbs up/down feedback from the frontend."""
-    request_logger.info("http_request", extra={"endpoint": "/api/feedback", "status": 200})
+    METRICS["http_requests"].add(1, {"endpoint": "/api/feedback", "status": "200"})
 
-    if req.vote not in ("up", "down"):
+    # 📊 Record the feedback choice straight to your OTel Counter metric
+    if req.vote in ("up", "down"):
+        METRICS["feedback_votes"].add(1, {"vote": req.vote})
+        logger.info(f"Feedback metric recorded: vote={req.vote}")
+    else:
         logger.warning(f"Unexpected vote value received: {req.vote!r}")
 
-    # Raw data event — always recorded, valid or not
-    feedback_logger.info(
-        "feedback_vote",
-        extra={
-            "vote": req.vote,
-            "message_length": len(req.user_message),
-            "response_length": len(req.bot_response),
-            "session_id": req.session_id or "anonymous",
-        },
-    )
-
-    logger.info(f"Feedback received: vote={req.vote}, msg_len={len(req.user_message)}")
     return JSONResponse({"status": "ok"})
 
 
@@ -233,26 +207,28 @@ async def health() -> JSONResponse:
         bot = get_orchestrator()
         status = bot.health_check()
         ok = status["language_detector"] and status["intent_classifier"]
-        request_logger.info(
-            "http_request",
-            extra={"endpoint": "/api/health", "status": 200 if ok else 207},
-        )
+
+        status_code = "200" if ok else "207"
+        METRICS["http_requests"].add(1, {"endpoint": "/api/health", "status": status_code})
+
         if not ok:
             logger.warning(f"Health check degraded: {status}")
+
         return JSONResponse(
             content={"status": "ok" if ok else "degraded", "modules": status},
             status_code=200 if ok else 207,
         )
     except Exception as e:
+        METRICS["http_requests"].add(1, {"endpoint": "/api/health", "status": "500"})
+        METRICS["http_errors"].add(1, {"endpoint": "/api/health"})
         logger.error(f"Health check failed: {e}", exc_info=True)
-        request_logger.info("http_request", extra={"endpoint": "/api/health", "status": 500})
         return JSONResponse(content={"status": "error", "detail": str(e)}, status_code=500)
 
 
 @app.get("/api/modules")
 async def modules_info() -> JSONResponse:
     """Detailed module information."""
-    request_logger.info("http_request", extra={"endpoint": "/api/modules", "status": 200})
+    METRICS["http_requests"].add(1, {"endpoint": "/api/modules", "status": "200"})
     return JSONResponse(
         {
             "modules": [

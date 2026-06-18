@@ -1,136 +1,135 @@
-"""
-telemetry.py — OpenTelemetry Logs instrumentation (raw events only)
-======================================================================
-Sends raw, per-request key-value events to a local OTel Collector via
-gRPC (port 4317). The collector forwards everything to Axiom over HTTPS.
-
-No pre-aggregation happens here — every event is sent as-is with full
-attributes, so all counting/averaging/grouping happens in Axiom queries.
-
-Events emitted:
-    http_request     — server: one row per API call (endpoint, status)
-    feedback_vote     — data:   one row per thumbs up/down
-    chat_completed     — model:  one row per chat pipeline run
-                                  (language, emotion, intent, latency_ms, used_rag)
-    app_lifecycle       — system: startup/shutdown/error events
-"""
-
-import logging
 import os
+from contextlib import contextmanager
+from time import perf_counter
 
-from opentelemetry._logs import set_logger_provider
-from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
-from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
-from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+from opentelemetry import metrics
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
+
+_METER_NAME = "serenity.metrics"
 
 
 def setup_telemetry():
-    """
-    Initialize OTel LoggerProvider only — no metrics, no aggregation.
-    Returns the loggers used to emit raw events, plus the provider for shutdown.
-    Call once at app startup.
-    """
-    resource = Resource.create({"service.name": "serenity-backend"})
+    # Identify application name for Axiom
+    resource = Resource.create(
+        attributes={
+            "service.name": "serenity-backend",
+            "service.version": os.getenv("APP_VERSION", "unknown"),
+        }
+    )
+
     endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+    headers_env = os.getenv("OTEL_EXPORTER_OTLP_HEADERS", "")
+    headers = dict(pair.split("=", 1) for pair in headers_env.split(",") if "=" in pair) or None
 
-    log_exporter = OTLPLogExporter(endpoint=endpoint, insecure=True)
-    logger_provider = LoggerProvider(resource=resource)
-    logger_provider.add_log_record_processor(BatchLogRecordProcessor(log_exporter))
-    set_logger_provider(logger_provider)
-
-    # Bridge Python's standard logging → OTel so every logger.info() is exported
-    otel_handler = LoggingHandler(level=logging.INFO, logger_provider=logger_provider)
-    logging.getLogger().addHandler(otel_handler)
-
-    # Loggers — each name becomes a filterable "scope" in Axiom
-    request_logger = logging.getLogger("serenity.request")
-    feedback_logger = logging.getLogger("serenity.feedback")
-    chat_logger = logging.getLogger("serenity.chat")
-    system_logger = logging.getLogger("serenity.system")
-
-    # Explicitly attach handler + level to each logger too — belt and suspenders,
-    # avoids relying solely on propagation to root in case something resets it
-    for lg in (request_logger, feedback_logger, chat_logger, system_logger):
-        lg.setLevel(logging.INFO)
-        lg.addHandler(otel_handler)
-
-    return (
-        request_logger,
-        feedback_logger,
-        chat_logger,
-        system_logger,
-        logger_provider,
+    exporter = OTLPMetricExporter(
+        endpoint=endpoint,
+        headers=headers,
+        insecure=endpoint.startswith("http://"),
+    )
+    reader = PeriodicExportingMetricReader(
+        exporter,
+        export_interval_millis=int(os.getenv("OTEL_EXPORT_INTERVAL_MS", "15000")),
     )
 
+    provider = MeterProvider(resource=resource, metric_readers=[reader])
+    metrics.set_meter_provider(provider)
+    meter = metrics.get_meter(_METER_NAME)
 
-# ── Smoke test ────────────────────────────────────────────────────────────────
-if __name__ == "__main__":
-    # Surface gRPC export errors instead of failing silently
-    logging.getLogger("opentelemetry.exporter.otlp.proto.grpc.exporter").setLevel(logging.DEBUG)
-    logging.basicConfig(level=logging.WARNING)
+    instruments = {}
 
-    print("Running telemetry smoke test...")
-    print("Make sure the OTel Collector is running: docker compose up otel-collector")
-    print()
+    # ── 1. System / Infrastructure ──────────────────────────────────────────
 
-    (
-        request_logger,
-        feedback_logger,
-        chat_logger,
-        system_logger,
-        logger_provider,
-    ) = setup_telemetry()
-
-    # ── Raw event examples — each is a single row in Axiom ────────────────────
-    system_logger.info("app_startup", extra={"event": "warmup_complete", "warmup_ms": 1200})
-
-    request_logger.info("http_request", extra={"endpoint": "/api/chat", "status": 200})
-    request_logger.info("http_request", extra={"endpoint": "/api/feedback", "status": 200})
-
-    feedback_logger.info("feedback_vote", extra={"vote": "up"})
-    feedback_logger.info("feedback_vote", extra={"vote": "down"})
-
-    chat_logger.info(
-        "chat_completed",
-        extra={
-            "language": "English",
-            "emotion": "sadness",
-            "intent": "asking_mental_health_question",
-            "latency_ms": 842.3,
-            "used_rag": True,
-            "message_length": 87,
-            "session_id": "test-session-001",
-        },
+    instruments["http_requests"] = meter.create_counter(
+        "serenity_http_requests_total",
+        description="Total API requests, labelled by endpoint and status code",
     )
-    chat_logger.info(
-        "chat_completed",
-        extra={
-            "language": "Arabic",
-            "emotion": "fear",
-            "intent": "asking_mental_health_question",
-            "latency_ms": 910.1,
-            "used_rag": True,
-            "message_length": 64,
-            "session_id": "test-session-002",
-        },
+    instruments["http_request_duration"] = meter.create_histogram(
+        "serenity_http_request_duration_seconds",
+        description="End-to-end request latency — drives P95/P99 panels",
+        unit="s",
     )
-    chat_logger.info(
-        "chat_completed",
-        extra={
-            "language": "English",
-            "emotion": "none",
-            "intent": "greeting",
-            "latency_ms": 48.5,
-            "used_rag": False,
-            "message_length": 5,
-            "session_id": "test-session-003",
-        },
+    instruments["http_errors"] = meter.create_counter(
+        "serenity_http_errors_total",
+        description="Failed requests (5xx / unhandled exceptions), labelled by endpoint",
     )
 
-    print("Raw events emitted. Forcing flush...")
-    flush_result = logger_provider.force_flush(timeout_millis=10000)
-    print(f"force_flush returned: {flush_result}")
+    # ── 2. NLP Pipeline — Language & Intent ─────────────────────────────────
 
-    logger_provider.shutdown()
-    print("Done. Check Axiom — each call above should appear as one raw row.")
+    instruments["language_detected"] = meter.create_counter(
+        "serenity_language_detected_total",
+        description="Detected input language, labelled by language code",
+    )
+    instruments["intent_classified"] = meter.create_counter(
+        "serenity_intent_classified_total",
+        description="Classified intent, labelled by intent label "
+        "(mental_health, general_chat, out_of_scope, crisis)",
+    )
+
+    # ── 3. Emotion Monitoring ────────────────────────────────────────────────
+
+    instruments["emotion_detected"] = meter.create_counter(
+        "serenity_emotion_detected_total",
+        description="Detected emotion, labelled by emotion class "
+        "(sadness, joy, love, anger, fear, surprise)",
+    )
+
+    # ── 4. RAG Retrieval Quality ─────────────────────────────────────────────
+
+    instruments["retrieval_top1_score"] = meter.create_histogram(
+        "serenity_retrieval_top1_score",
+        description="Top-1 cosine similarity score per query — "
+        "alert if rolling average drops below 0.5",
+    )
+    instruments["retrieved_chunk_count"] = meter.create_histogram(
+        "serenity_retrieved_chunk_count",
+        description="Number of chunks retrieved per RAG query",
+    )
+
+    # ── 5. Cost / Routing Efficiency ─────────────────────────────────────────
+
+    instruments["llm_calls"] = meter.create_counter(
+        "serenity_llm_calls_total",
+        description="LLM invocations, labelled by route "
+        "(rag_triggered vs general_response) — used to compute RAG activation rate",
+    )
+
+    # ── 6. Safety / Crisis Monitoring ────────────────────────────────────────
+    instruments["crisis_escalation"] = meter.create_counter(
+        "serenity_crisis_escalation_total",
+        description="Crisis escalations triggered, labelled by crisis_type "
+        "(self_harm, emergency_phrase, other)",
+    )
+
+    # ── 7. User Input Shape ───────────────────────────────────────────────────
+    # Anomalously long inputs can indicate prompt injection / misuse.
+    instruments["input_length"] = meter.create_histogram(
+        "serenity_input_length_chars",
+        description="User message length in characters",
+    )
+
+    # ── 8. Feedback ───────────────────────────────────────────────────────────
+    instruments["feedback_votes"] = meter.create_counter(
+        "serenity_feedback_votes_total",
+        description="Thumbs up/down votes, labelled by vote (up, down)",
+    )
+
+    return instruments
+
+
+@contextmanager
+def timed_histogram(histogram, attributes: dict | None = None):
+    """
+    Convenience context manager for timing a block and recording it
+    to a histogram in seconds.
+
+        with timed_histogram(METRICS["http_request_duration"], {"endpoint": "/chat"}):
+            do_work()
+    """
+    start = perf_counter()
+    try:
+        yield
+    finally:
+        histogram.record(perf_counter() - start, attributes or {})
