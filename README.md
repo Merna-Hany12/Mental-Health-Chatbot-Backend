@@ -416,7 +416,8 @@ docker build -t mental-health-chatbot:latest .
 ## Deployed on Hugging Face
 
 The application is deployed and hosted on **Hugging Face Spaces**, providing easy public access and demonstration of the chatbot.
-
+🚀 Live Demo
+👉 [Mental Health Chatbot Backend](https://huggingface.co/spaces/mernahany666/mental-health-chatbot-backend) 
 ### Hugging Face Deployment
 
 #### **Deployment Configuration**
