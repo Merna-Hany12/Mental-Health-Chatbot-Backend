@@ -142,7 +142,7 @@ def log_chat_event(
         _log.warning("AXIOM_TOKEN not set — skipping log_chat_event")
         return
     try:
-        requests.post(
+        resp = requests.post(
             f"https://api.axiom.co/v1/datasets/{AXIOM_DATASET}/ingest",
             headers={
                 "Authorization": f"Bearer {AXIOM_TOKEN}",
@@ -151,17 +151,20 @@ def log_chat_event(
             json=[
                 {
                     "body": "chat_completed",
-                    "attributes.latency_ms": latency_ms,
-                    "attributes.language": language,
-                    "attributes.emotion": emotion,
-                    "attributes.intent": intent,
-                    "attributes.used_rag": used_rag,
-                    "attributes.message_length": message_length,
-                    "attributes.session_id": session_id,
+                    "attributes": {
+                        "latency_ms": latency_ms,
+                        "language": language,
+                        "emotion": emotion,
+                        "intent": intent,
+                        "used_rag": used_rag,
+                        "message_length": message_length,
+                        "session_id": session_id,
+                    },
                 }
             ],
             timeout=3,
         )
+        _log.debug("log_chat_event → Axiom %s", resp.status_code)
     except Exception as exc:
         # Never let telemetry block or crash the chat response
         _log.warning("log_chat_event failed: %s", exc)
