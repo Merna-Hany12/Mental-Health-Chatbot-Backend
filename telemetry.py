@@ -4,15 +4,16 @@ from contextlib import contextmanager
 from time import perf_counter
 
 import requests
-
-_log = logging.getLogger(__name__)
-AXIOM_TOKEN = os.getenv("AXIOM_TOKEN", "")
-AXIOM_DATASET = os.getenv("AXIOM_DATASET", "mental_health")
 from opentelemetry import metrics
 from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
+
+_log = logging.getLogger(__name__)
+AXIOM_TOKEN = os.getenv("AXIOM_TOKEN", "")
+AXIOM_DATASET = os.getenv("AXIOM_DATASET", "mental_health")
+
 
 _METER_NAME = "serenity.metrics"
 
