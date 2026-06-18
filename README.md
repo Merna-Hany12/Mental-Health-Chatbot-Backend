@@ -15,10 +15,14 @@ pinned: false
 2. [NLP Modules](#nlp-modules)
 3. [Development Journey](#development-journey)
 4. [RAG Architecture](#rag-architecture)
-5. [User Interface](#user-interface)
-6. [Project Structure](#project-structure)
-7. [Quick Start Guide](#quick-start-guide)
-8. [Conclusion](#conclusion)
+5. [Unit Testing](#unit-testing)
+6. [Containerization](#containerization)
+7. [Connecting to Axiom](#connecting-to-axiom)
+8. [CI/CD Pipeline](#cicd-pipeline)
+9. [Deployed on Hugging Face](#deployed-on-hugging-face)
+10. [Project Structure](#project-structure)
+11. [Quick Start Guide](#quick-start-guide)
+12. [Conclusion](#conclusion)
 
 ---
 
@@ -211,23 +215,234 @@ We use Groq's fast, efficient LLM for response generation:
 
 ---
 
-## User Interface
+## Unit Testing
 
-The chatbot features an intuitive, user-friendly web interface built with modern web technologies.
+Comprehensive unit tests ensure the reliability and correctness of all critical system components.
 
-### Main Chat Interface
-- Clean, responsive design
-- Real-time message streaming
-- Visual emotion indicators
-- Source citations below responses
+### Test Coverage
 
-![MindBridge UI 1](static/ui1.png)
+The test suite covers three main pillars of the system:
 
-![MindBridge UI 2](static/ui2.png)
+#### **1. Endpoints Testing** (`test_endpoints.py`)
+- Tests all FastAPI endpoints including `/api/chat`, `/api/health`, and `/api/modules`
+- Validates request/response formats and HTTP status codes
+- Ensures proper error handling and edge case scenarios
+- Verifies response time performance and payload structures
 
-![MindBridge UI 3](static/ui3.png)
+#### **2. Classifiers Testing** (`test_classifiers.py`)
+- **Emotion Classifier**: Validates emotion detection accuracy across all emotion categories (sadness, joy, love, anger, fear, surprise)
+- **Intent Classifier**: Tests intent classification logic including RAG-triggering intents, greetings, goodbyes, and out-of-scope detection
+- **Language Detector**: Verifies multilingual language detection functionality across 40+ languages
+- Confidence score validation and crisis flag detection for high-risk emotional states
 
-![MindBridge UI 4](static/ui4.png)
+#### **3. RAG Pipeline Testing** (`test_rag.py`)
+- Tests the end-to-end RAG pipeline including embedding, retrieval, and response generation
+- Validates retrieval quality from Qdrant vector database
+- Ensures proper context window management and token counting
+- Verifies source citation accuracy and relevance ranking
+- Tests multilingual query handling and translation integration
+
+### Running Tests
+```bash
+# Run all tests
+pytest tests/
+
+# Run specific test file
+pytest tests/test_endpoints.py
+pytest tests/test_classifiers.py
+pytest tests/test_rag.py
+
+```
+
+---
+
+## Containerization
+
+The application has been containerized through an iterative development process, ultimately settling on an optimized single-container approach.
+
+### Evolution of Containerization Strategy
+
+#### **Approach 1: Single Dockerfile (Initial)**
+- Simple, monolithic containerization
+- All dependencies bundled in one image
+- Limitation: OpenTelemetry service wasn't running alongside the backend
+
+#### **Approach 2: Docker Compose with Separate Services**
+- Separated backend service and OpenTelemetry collector service
+- Used `docker-compose.yml` for orchestration
+- **Issues Encountered**:
+  - Network communication overhead between containers
+  - Difficulty managing service dependencies during deployment
+  - Increased complexity in managing multiple container lifecycles
+  - Deployment compatibility issues in certain environments
+
+#### **Approach 3: Optimized Single Dockerfile (Final - Current)**
+- **Best Solution**: Downloads OpenTelemetry collector within the same container as the backend
+- Uses `start.sh` script to orchestrate both services within a single container
+- **Advantages**:
+  - Simpler deployment pipeline
+  - Reduced network overhead
+  - Single image to manage and deploy
+  - Improved compatibility with containerized environments
+  - Better resource efficiency
+
+### Building and Running the Container
+
+```bash
+# Build the Docker image
+docker build -t mental-health-chatbot:latest .
+
+# Run the container
+docker run -p 8000:8000 --env-file .env mental-health-chatbot:latest
+```
+
+### Container Structure
+- **Base Image**: Python 3.9+
+- **Included Components**:
+  - FastAPI backend service
+  - OpenTelemetry collector (downloaded at build time)
+  - Start script (`start.sh`) to bootstrap both services
+  - All Python dependencies
+
+---
+
+## Connecting to Axiom
+
+The application integrates with Axiom for comprehensive observability and monitoring through OpenTelemetry.
+
+### Axiom Integration Setup
+
+**Axiom** is a serverless log management and analytics platform that receives telemetry data from OpenTelemetry collectors.
+
+#### **Configuration**
+- OpenTelemetry collector exports traces and logs to Axiom
+- Environment configuration in `otel-collector-config.yaml`
+- Axiom API endpoint and dataset configuration for data ingestion
+
+### Metrics and Monitoring
+
+#### **Key Metrics Collected**
+
+1. **Request Metrics**
+   - Request latency (per endpoint)
+   - Request throughput (requests/sec)
+   - HTTP status code distribution
+   - Request payload size
+
+2. **NLP Module Metrics**
+   - Language detection accuracy and confidence scores
+   - Emotion classification performance and detected emotion distribution
+   - Intent classification latency and accuracy
+   - Translation time (when multilingual queries are processed)
+
+3. **RAG Pipeline Metrics**
+   - Query embedding time
+   - Vector database retrieval latency
+   - Number of retrieved documents
+   - LLM response generation time
+   - End-to-end RAG pipeline latency
+
+4. **System Health Metrics**
+   - CPU and memory usage
+   - API availability and uptime
+   - Error rates and exception tracking
+   - Crisis flag detection events
+
+5. **Business Metrics**
+   - Chat conversations count
+   - Average session duration
+   - User language distribution
+   - Emotion distribution over time
+
+### Accessing Axiom Dashboard
+- Real-time monitoring and alerting
+- Historical trend analysis
+- Performance bottleneck identification
+- Debugging and troubleshooting with full trace context
+
+---
+
+## CI/CD Pipeline
+
+The project includes a robust Continuous Integration/Continuous Deployment pipeline for automated testing, building, and deployment.
+
+### Pipeline Stages
+
+#### **1. Code Quality & Testing**
+- Linting and code style checks
+- Unit test execution across all test files
+- Test coverage validation
+- Dependency vulnerability scanning
+
+#### **2. Build & Containerization**
+- Docker image building
+- Image scanning for security vulnerabilities
+- Tagging with version numbers and git commit SHA
+- Image registry push to container repository
+
+#### **3. Deployment**
+- Automated deployment to staging environment
+- Smoke tests against deployed instance
+- Health check validation
+- Production deployment (with manual approval)
+
+#### **4. Post-Deployment Verification**
+- Integration tests
+- Performance benchmarking
+- Axiom metrics validation
+- Alert configuration
+
+### CI/CD Tools
+- **Version Control**: Git/GitHub
+- **CI/CD Platform**: GitHub Actions
+- **Container Registry**: Docker Hub / GitHub Container Registry
+- **Orchestration**: Kubernetes (for advanced deployments)
+
+### Running Locally
+```bash
+# Lint and format code
+pylint modules/ main.py orchestrator.py
+black modules/ main.py orchestrator.py
+
+# Run tests
+pytest tests/ --cov=modules
+
+# Build image
+docker build -t mental-health-chatbot:latest .
+```
+
+---
+
+## Deployed on Hugging Face
+
+The application is deployed and hosted on **Hugging Face Spaces**, providing easy public access and demonstration of the chatbot.
+
+### Hugging Face Deployment
+
+#### **Deployment Configuration**
+- **Platform**: Hugging Face Spaces
+- **Runtime**: Docker container
+- **Port**: 8000
+- **Access**: Public URL for live demonstration
+
+#### **Benefits of Hugging Face Deployment**
+- **Zero Infrastructure Management**: Automatic scaling and resource allocation
+- **Easy Sharing**: Public URL for demos and stakeholder access
+- **Integration**: Native support for Hugging Face models and datasets
+- **Community**: Access to Hugging Face ecosystem and model library
+- **Monitoring**: Built-in logging and performance monitoring
+
+#### **Deployment Process**
+1. Connect GitHub repository to Hugging Face Spaces
+2. Configure environment variables (API keys, database URLs)
+3. Deploy using the Dockerfile in the repository
+4. Access live application via Hugging Face Space URL
+5. Automatic redeploy on push to main branch
+
+#### **Live Access**
+- Application accessible via public Hugging Face Spaces URL
+- Demonstration available for testing and feedback
+- Easy sharing with stakeholders and users
 
 ---
 
